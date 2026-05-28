@@ -1,9 +1,9 @@
 'use client';
-
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Navbar from '@/components/common/Navbar';
-import { useRouter } from 'next/navigation';
 import { 
   Users, CalendarDays, Activity, Search, Sparkles, UserPlus, 
   Trash2, ClipboardList, TrendingUp, DollarSign, Award, Clock,
@@ -11,20 +11,29 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard() {
-  const { user, token, API_BASE_URL, logout } = useAuth();
-  const router = useRouter();
+  const { user, token,loading, API_BASE_URL, logout } = useAuth();
+const router = useRouter();
 
-  // Navigation Guard
-  useEffect(() => {
-    if (!user) {
-      router.push('/login');
-    }
-  }, [user]);
+// Global State
+const [activeTab, setActiveTab] = useState('reports');
+// Navigation Guard
+useEffect(() => {
+  if (!user) {
+    router.push('/login');
+  }
+}, [user, router]);
 
-  if (!user) return null;
+useEffect(() => {
+  if (!user) return;
 
-  // Global State
-  const [activeTab, setActiveTab] = useState(user.role === 'ADMIN' ? 'reports' : user.role === 'RECEPTIONIST' ? 'patients' : 'appointments');
+  if (user.role === 'ADMIN') {
+    setActiveTab('reports');
+  } else if (user.role === 'RECEPTIONIST') {
+    setActiveTab('patients');
+  } else if (user.role === 'DOCTOR') {
+    setActiveTab('appointments');
+  }
+}, [user]);
 
   // ==========================================
   // STATE FOR RECEPTIONIST WORKFLOWS
@@ -97,11 +106,12 @@ export default function Dashboard() {
 
   // Trigger Patient List Fetch (Every keystroke trigger re-renders parent! - Performance bug)
   useEffect(() => {
-    if (user.role === 'RECEPTIONIST' || user.role === 'ADMIN') {
-      fetchPatients(1);
-    }
-  }, [patientSearch, patientGender]);
+  if (!user || !token) return;
 
+  if (user.role === 'RECEPTIONIST' || user.role === 'ADMIN') {
+    fetchPatients(1);
+  }
+}, [user, token, patientSearch, patientGender]);
   // Fetch Doctors for booking drop-down
   const fetchDoctorsDropdown = async () => {
     try {
@@ -116,9 +126,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchDoctorsDropdown();
-  }, []);
+  if (!token) return;
 
+  fetchDoctorsDropdown();
+}, [token]);
   // Handle Patient Registration
   const handleRegisterPatient = async (e) => {
     e.preventDefault();
@@ -253,7 +264,7 @@ export default function Dashboard() {
   // DOCTOR WORKFLOW FUNCTIONS
   // ==========================================
   const fetchDoctorWorklist = async () => {
-    if (user.role !== 'DOCTOR') return;
+    if (!user || user.role !== 'DOCTOR') return;
     try {
       // Find matching doctor from doctors dropdown using user ID link
       const matchedDoc = doctorsList.find(d => d.userId === user.id);
@@ -281,10 +292,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (user.role === 'DOCTOR' && doctorsList.length > 0) {
-      fetchDoctorWorklist();
-    }
-  }, [doctorsList]);
+  if (user && user.role === 'DOCTOR' && doctorsList.length > 0) {
+    fetchDoctorWorklist();
+  }
+}, [user, doctorsList]);
 
   // Update token status (WAITING -> CALLING -> COMPLETED / SKIPPED)
   const handleUpdateQueueStatus = async (tokenId, newStatus) => {
@@ -349,21 +360,40 @@ export default function Dashboard() {
 
   // Search Doctors (SQL Injection vulnerable API!)
   const searchPhysiciansAdmin = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/doctors?search=${adminSearchQuery}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setDoctorsList(data);
-      } else {
-        alert(`API Error: ${data.sqlMessage || data.error}`);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  if (!token) {
+    alert('Session expired. Please login again.');
+    router.push('/login');
+    return;
+  }
 
+  try {
+    const res = await fetch(`${API_BASE_URL}/doctors?search=${encodeURIComponent(adminSearchQuery)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+
+    if (Array.isArray(data)) {
+      setDoctorsList(data);
+    } else {
+      alert(`API Error: ${data.error || 'Failed to search doctors'}`);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+};
+if (!user) {
+  return null;
+}
+if (loading) {
+  return <div className="p-6 text-sm text-slate-500">Loading session...</div>;
+}
+
+if (!user || !token) {
+  return null;
+}
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -1098,7 +1128,7 @@ export default function Dashboard() {
                 Staff Physicians Registry Lookup
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">
-                Database lookup for credentials. Uses a raw SQL interpolation backend query.
+                Database lookup for physician credentials using safe Prisma filtering.
               </p>
             </div>
 
@@ -1120,18 +1150,18 @@ export default function Dashboard() {
                 onClick={searchPhysiciansAdmin}
                 className="glow-btn px-5 py-2 bg-slate-900 text-white dark:bg-teal-500 dark:text-slate-950 font-bold text-xs rounded-lg hover:bg-slate-800 dark:hover:bg-teal-400 transition-colors"
               >
-                Execute SQL Query
+                Search Physicians
               </button>
             </div>
 
             <div className="p-3 bg-rose-500/10 text-rose-500 text-xs rounded-lg border border-rose-500/20 font-semibold leading-5 flex gap-3">
               <ShieldAlert className="h-5 w-5 shrink-0" />
               <div>
-                <strong>SQL Vulnerability alert:</strong> This search executes raw interpolation: 
+                <strong>Secure Search Enabled:</strong> This search now uses safe Prisma filtering:
                 <code className="block bg-black/10 dark:bg-black/30 p-1.5 rounded mt-1 font-mono">
-                  SELECT * FROM &quot;Doctor&quot; WHERE name ILIKE &apos;%&#123;query&#125;%&apos;
+                 Doctor search input is treated as plain text and cannot modify the database query.
                 </code>
-                Can be audited by inputting standard SQL injection strings to leak full user login lists.
+                SQL injection strings are now treated as plain search text and should not return unrelated records.
               </div>
             </div>
 

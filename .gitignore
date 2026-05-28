@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env
+*.env
+docker-compose.yml.save
+backend/node_modules/
+frontend/node_modules/
+backend/.env
+frontend/.next/
