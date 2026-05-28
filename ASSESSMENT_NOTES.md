@@ -83,6 +83,20 @@ Updated the UI copy from vulnerability warning to secure search messaging.
 **Impact:**  
 Frontend now accurately reflects the fixed backend behavior.
 
+### 5. Patient Medical History Null Crash
+
+**Issue:**  
+The doctor patient history view directly called `.toUpperCase()` on `medicalHistory`.
+
+**Risk:**  
+If `medicalHistory` was null or empty, the dashboard crashed.
+
+**Fix Implemented:**  
+Added a fallback value before calling `.toUpperCase()`.
+
+**Impact:**  
+Doctor dashboard can now safely display patients with blank medical history.
+
 ## Remaining Known Issues
 
 Due to time constraints, the following are known remaining areas for improvement:

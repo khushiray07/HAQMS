@@ -87,6 +87,8 @@ model Appointment {
   // MISSING INDEX: No index on (doctorId, status) — important for worklist queries.
   // MISSING INDEX: No index on patientId foreign key.
   queueTokens QueueToken[]
+
+  @@unique([doctorId, appointmentDate])
 }
 
 model QueueToken {
